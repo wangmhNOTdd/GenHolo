@@ -1,10 +1,10 @@
 dataset:
-  root: "/data/plinder"  # 修改为服务器上 PLINDER 数据集的根路径
-  split_yaml: "${dataset.root}/2024-06/v2/splits/split.yaml"
-  annotation_table: "${dataset.root}/2024-06/v2/index/annotation_table_nonredundant.parquet"
+  root: "./v2"  # 当前项目根目录下的 v2 数据副本
+  split_yaml: "${dataset.root}/splits/split.yaml"
+  annotation_table: "${dataset.root}/index/annotation_table_nonredundant.parquet"
   cache_root: "./data/cache/stage_a"
-  systems_dir: "${dataset.root}/2024-06/v2/systems"
-  linked_structures_dir: "${dataset.root}/2024-06/v2/linked_structures"
+  systems_dir: "${dataset.root}/systems"
+  linked_structures_dir: "${dataset.root}/linked_structures"
   system_id_column: "system_id"
   two_char_column: "two_char_code"
   holo_structure_column: "structure_path"
