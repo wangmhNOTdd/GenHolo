@@ -1,0 +1,90 @@
+dataset:
+  root: "/data/plinder"  # 修改为服务器上 PLINDER 数据集的根路径
+  split_yaml: "${dataset.root}/2024-06/v2/splits/split.yaml"
+  annotation_table: "${dataset.root}/2024-06/v2/index/annotation_table_nonredundant.parquet"
+  cache_root: "./data/cache/stage_a"
+  systems_dir: "${dataset.root}/2024-06/v2/systems"
+  linked_structures_dir: "${dataset.root}/2024-06/v2/linked_structures"
+  system_id_column: "system_id"
+  two_char_column: "two_char_code"
+  holo_structure_column: "structure_path"
+  ligand_file_column: "ligand_path"
+  pocket_radius: 8.0
+  max_residues: 192
+  max_tokens: 256
+  contact_cutoff: 6.0
+  ligand_cache_format: "pt"
+  holo_pdb_selector: "*_holo.pdb"
+  ligand_file_selector: "*_ligand.sdf"
+  ligand_fallback_format: "pdb"  # 如果没有 SDF 则尝试 PDB
+
+encoders:
+  protein:
+    type: "esm3"
+    model_name: "esm3_t30_150M_UR50D"  # 修改为实际使用的权重
+    chunk_size: 1024
+    device: "cuda"
+    fp16: true
+    projection:
+      type: "linear"
+      in_dim: 1024
+      out_dim: 512
+      checkpoint: null  # 可指定线性层权重文件
+  ligand:
+    type: "rdkit_gnn"
+    feature_dim: 256
+    projection_dim: 512
+    force_rdkit_embed: true
+
+model:
+  type: "latent_decoder"
+  latent_dim: 512
+  hidden_dim: 256
+  num_layers: 3
+  heads: 4
+  dropout: 0.1
+  activation: "gelu"
+  use_edge_norm: true
+  coordinate_residual: true
+
+loss:
+  huber_delta: 1.0
+  lambda_l1: 1.0
+  lambda_chem: 0.2
+  lambda_geom: 0.5
+  lambda_repel: 0.1
+  contact_repel_rc: 2.0
+  contact_repel_beta: 4.0
+
+training:
+  seed: 3407
+  epochs: 20
+  micro_batch_size: 2
+  grad_accum_steps: 8
+  num_workers: 8
+  pin_memory: true
+  prefetch_factor: 2
+  lr: 2.0e-4
+  weight_decay: 0.05
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  max_grad_norm: 1.0
+  scheduler:
+    type: "cosine"
+    warmup_steps: 1000
+  amp_dtype: "bf16"
+  grad_checkpoint: true
+  ema:
+    decay: 0.9995
+    start_step: 500
+  ckpt_interval_steps: 1000
+  log_interval: 50
+  val_interval_steps: 2000
+
+augmentation:
+  latent_noise_tau: 0.7
+
+paths:
+  output_dir: "./outputs/stage_a"
+  checkpoint_dir: "./checkpoints/stage_a"
+  log_dir: "./logs/stage_a"
