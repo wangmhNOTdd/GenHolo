@@ -6,7 +6,7 @@ dataset:
   systems_dir: "${dataset.root}/systems"
   linked_structures_dir: "${dataset.root}/linked_structures"
   system_id_column: "system_id"
-  two_char_column: "two_char_code"
+  two_char_column: "entry_pdb_id"
   holo_structure_column: "structure_path"
   ligand_file_column: "ligand_path"
   pocket_radius: 8.0
