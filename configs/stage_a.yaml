@@ -1,6 +1,6 @@
 dataset:
   root: "./v2"  # 当前项目根目录下的 v2 数据副本
-  split_yaml: "${dataset.root}/splits/split.yaml"
+  split_yaml: "${dataset.root}/splits/split.parquet"
   annotation_table: "${dataset.root}/index/annotation_table.parquet"
   cache_root: "./data/cache/stage_a"
   systems_dir: "${dataset.root}/systems"
