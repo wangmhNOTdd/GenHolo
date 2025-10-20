@@ -31,12 +31,15 @@ encoders:
       out_dim: 512  # 投影到512维
       checkpoint: null  # 可指定线性层权重文件
   ligand:
-    type: "unimol"  # 使用UniMol
-    feature_dim: 512  # UniMol输出维度
+    type: "painn"  # 使用PaiNN
+    feature_dim: 256  # PaiNN输出维度
     projection_dim: 512  # 投影到512维
+    hidden_channels: 256
+    num_layers: 4
+    num_rbf: 32
+    cutoff: 6.0
     max_atoms: 256
     use_gpu: true
-    remove_hs: true
 
 model:
   type: "latent_decoder"

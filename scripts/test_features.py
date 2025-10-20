@@ -9,7 +9,7 @@ import torch
 from pathlib import Path
 
 from src.features.esm3_protein import ESM3ProteinEncoder, ESM3ProteinEncoderConfig
-from src.features.unimol_ligand import UniMolLigandEncoder, UniMolLigandEncoderConfig
+from src.features.unimol_ligand import PaiNNLigandEncoder, PaiNNLigandEncoderConfig
 from src.features.ligand import load_ligand_from_file
 
 
@@ -49,15 +49,14 @@ def test_unimol_ligand():
     print("\n开始测试UniMol小分子特征提取...")
     
     # 创建UniMol配体编码器配置
-    ligand_cfg = UniMolLigandEncoderConfig(
+    ligand_cfg = PaiNNLigandEncoderConfig(
         projection_dim=512,
         max_atoms=256,
         use_gpu=False,  # 使用CPU进行测试
-        remove_hs=True
     )
     
     try:
-        encoder = UniMolLigandEncoder(ligand_cfg)
+        encoder = PaiNNLigandEncoder(ligand_cfg)
         print("UniMol配体编码器创建成功")
         
         # 创建一个简单的分子用于测试
@@ -94,13 +93,12 @@ def test_with_real_data():
             print(f"成功加载配体: {Chem.MolToSmiles(mol)}")
             
             # 使用UniMol编码
-            ligand_cfg = UniMolLigandEncoderConfig(
+            ligand_cfg = PaiNNLigandEncoderConfig(
                 projection_dim=512,
                 max_atoms=256,
                 use_gpu=False,
-                remove_hs=True
             )
-            encoder = UniMolLigandEncoder(ligand_cfg)
+            encoder = PaiNNLigandEncoder(ligand_cfg)
             features, info = encoder.featurize(mol)
             
             print(f"真实配体特征提取成功: {features.shape}")
@@ -114,13 +112,12 @@ def test_with_real_data():
                 print(f"使用测试分子: {Chem.MolToSmiles(mol)}")
                 
                 # 使用UniMol编码
-                ligand_cfg = UniMolLigandEncoderConfig(
+                ligand_cfg = PaiNNLigandEncoderConfig(
                     projection_dim=512,
                     max_atoms=256,
                     use_gpu=False,
-                    remove_hs=True
                 )
-                encoder = UniMolLigandEncoder(ligand_cfg)
+                encoder = PaiNNLigandEncoder(ligand_cfg)
                 features, info = encoder.featurize(mol)
                 
                 print(f"测试分子特征提取成功: {features.shape}")

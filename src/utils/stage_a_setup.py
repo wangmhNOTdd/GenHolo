@@ -11,14 +11,14 @@ except ImportError as exc:  # pragma: no cover
 from ..data.cache_builder import DatasetConfig
 from ..features.ligand import LigandEncoderConfig
 from ..features.protein import ProteinEncoderConfig
-from ..features.unimol_ligand import UniMolLigandEncoderConfig
+from ..features.unimol_ligand import PaiNNLigandEncoderConfig
 from ..features.esm3_protein import ESM3ProteinEncoderConfig
 
 
 def build_stage_a_configs(cfg: dict) -> Tuple[
     DatasetConfig,
     Union[ESM3ProteinEncoderConfig, ProteinEncoderConfig],
-    Union[UniMolLigandEncoderConfig, LigandEncoderConfig]
+    Union[PaiNNLigandEncoderConfig, LigandEncoderConfig]
 ]:
     dataset_cfg = DatasetConfig(
         root=Path(cfg["dataset"]["root"]),
@@ -66,12 +66,15 @@ def build_stage_a_configs(cfg: dict) -> Tuple[
 
     # 根据配置选择配体编码器类型
     ligand_type = cfg["encoders"]["ligand"].get("type", "rdkit_gnn")
-    if ligand_type == "unimol":
-        ligand_cfg = UniMolLigandEncoderConfig(
+    if ligand_type == "painn":
+        ligand_cfg = PaiNNLigandEncoderConfig(
             projection_dim=cfg["encoders"]["ligand"].get("projection_dim", 512),
+            hidden_channels=cfg["encoders"]["ligand"].get("hidden_channels", 256),
+            num_layers=cfg["encoders"]["ligand"].get("num_layers", 4),
+            num_rbf=cfg["encoders"]["ligand"].get("num_rbf", 32),
+            cutoff=cfg["encoders"]["ligand"].get("cutoff", 6.0),
             max_atoms=cfg["encoders"]["ligand"].get("max_atoms", 256),
             use_gpu=cfg["encoders"]["ligand"].get("use_gpu", True),
-            remove_hs=cfg["encoders"]["ligand"].get("remove_hs", True),
         )
     else:
         # 传统RDKit编码器

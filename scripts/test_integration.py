@@ -59,6 +59,12 @@ def test_cache_builder():
         print(f"蛋白质编码器: {type(builder.protein_encoder)}")
         print(f"配体编码器: {type(builder.ligand_builder)}")
         
+        # 验证PaiNN编码器配置
+        from src.features.unimol_ligand import PaiNNLigandEncoderConfig
+        if isinstance(ligand_cfg, PaiNNLigandEncoderConfig):
+            print(f"PaiNN截止距离: {ligand_cfg.cutoff}")
+            print(f"PaiNN层数: {ligand_cfg.num_layers}")
+        
         return True
     except Exception as e:
         print(f"缓存构建器初始化失败: {e}")

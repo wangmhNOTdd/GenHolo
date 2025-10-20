@@ -28,7 +28,7 @@ except ImportError as exc:  # pragma: no cover
 
 from ..features.ligand import LigandEncoderConfig, LigandFeatureBuilder, load_ligand_from_file
 from ..features.protein import ESMProteinEncoder, ProteinEncoderConfig
-from ..features.unimol_ligand import UniMolLigandEncoder, UniMolLigandEncoderConfig
+from ..features.unimol_ligand import PaiNNLigandEncoder, PaiNNLigandEncoderConfig
 from ..features.esm3_protein import ESM3ProteinEncoder, ESM3ProteinEncoderConfig
 from .utils import load_split_ids
 
@@ -67,7 +67,7 @@ class StageACacheBuilder:
         self,
         dataset_cfg: DatasetConfig,
         protein_cfg: Union[ESM3ProteinEncoderConfig, ProteinEncoderConfig],
-        ligand_cfg: Union[UniMolLigandEncoderConfig, LigandEncoderConfig],
+        ligand_cfg: Union[PaiNNLigandEncoderConfig, LigandEncoderConfig],
     ) -> None:
         self.dataset_cfg = dataset_cfg
         # 根据配置类型创建相应的蛋白质编码器
@@ -77,8 +77,8 @@ class StageACacheBuilder:
             self.protein_encoder = ESMProteinEncoder(protein_cfg)
             
         # 根据配置类型创建相应的配体编码器
-        if isinstance(ligand_cfg, UniMolLigandEncoderConfig):
-            self.ligand_builder = UniMolLigandEncoder(ligand_cfg)
+        if isinstance(ligand_cfg, PaiNNLigandEncoderConfig):
+            self.ligand_builder = PaiNNLigandEncoder(ligand_cfg)
         else:
             self.ligand_builder = LigandFeatureBuilder(ligand_cfg)
             

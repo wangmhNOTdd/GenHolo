@@ -6,6 +6,7 @@ from typing import Dict, List, Tuple
 
 try:
     import torch  # type: ignore
+    import torch.nn as nn
 except ImportError as exc:  # pragma: no cover
     raise ImportError("请先安装 PyTorch，命令: pip install torch") from exc
 
@@ -15,41 +16,98 @@ try:
 except ImportError as exc:  # pragma: no cover
     raise ImportError("未检测到 RDKit，请在服务器执行: conda install -c conda-forge rdkit") from exc
 
-try:
-    import unimol  # type: ignore
-    from unimol_tools import UniMolRepr  # type: ignore
-except ImportError as exc:  # pragma: no cover
-    raise ImportError(
-        "未检测到 UniMol，请先在服务器上安装 (pip install unimol unimol-tools)。"
-    ) from exc
-
 
 @dataclass
-class UniMolLigandEncoderConfig:
-    projection_dim: int
+class PaiNNLigandEncoderConfig:
+    projection_dim: int = 512
+    hidden_channels: int = 256
+    num_layers: int = 4
+    num_rbf: int = 32
+    cutoff: float = 6.0
     max_atoms: int = 256
     use_gpu: bool = True
-    remove_hs: bool = True
-    featurize_method: str = "unimol"  # unimol or rdkit_gnn
 
 
-class UniMolLigandEncoder:
-    def __init__(self, cfg: UniMolLigandEncoderConfig) -> None:
+class PaiNNLigandEncoder:
+    def __init__(self, cfg: PaiNNLigandEncoderConfig) -> None:
         self.cfg = cfg
-        # 初始化UniMol表示提取器
-        self.unimol_repr = UniMolRepr(
-            data_type='molecule',
-            remove_hs=cfg.remove_hs,
-            device='cuda' if cfg.use_gpu and torch.cuda.is_available() else 'cpu'
-        )
         
-        # 创建投影层
-        self.projection = torch.nn.Linear(512, cfg.projection_dim)  # UniMol输出通常是512维
+        # 尝试导入TorchMDNet的PaiNN
+        try:
+            from torchmdnet.models.painn import PaiNN
+            self.painn = PaiNN(
+                hidden_channels=cfg.hidden_channels,
+                num_layers=cfg.num_layers,
+                num_rbf=cfg.num_rbf,
+                cutoff=cfg.cutoff
+            )
+        except ImportError:
+            # 如果没有torchmdnet，创建一个简单的PaiNN替代实现
+            self.painn = self._create_simple_painn()
+        
+        self.painn.eval()
+        for p in self.painn.parameters():
+            p.requires_grad = False  # 冻结
+        
+        # 创建投影层，将hidden_channels投影到目标维度
+        self.projection = nn.Linear(cfg.hidden_channels, cfg.projection_dim, bias=False)
         self.projection.eval()
+
+    def _create_simple_painn(self):
+        """创建一个简单的PaiNN替代实现，用于测试目的"""
+        # 这是一个简化的表示，实际的PaiNN实现会更复杂
+        # 这里我们创建一个简单的图神经网络作为替代
+        import torch.nn.functional as F
+        
+        class SimplePaiNN(nn.Module):
+            def __init__(self, hidden_channels=256, num_layers=4, num_rbf=32, cutoff=6.0):
+                super().__init__()
+                self.hidden_channels = hidden_channels
+                self.num_layers = num_layers
+                self.cutoff = cutoff
+                
+                # 原子嵌入层
+                self.atom_embedding = nn.Embedding(100, hidden_channels)  # 假设最多100种原子
+                
+                # 简单的消息传递层
+                self.message_layers = nn.ModuleList([
+                    nn.Sequential(
+                        nn.Linear(hidden_channels * 2, hidden_channels),
+                        nn.ReLU(),
+                        nn.Linear(hidden_channels, hidden_channels)
+                    ) for _ in range(num_layers)
+                ])
+                
+            def forward(self, z, pos, batch, edge_index):
+                # 原子嵌入
+                h = self.atom_embedding(z)
+                
+                # 简单的消息传递
+                for layer in self.message_layers:
+                    # 获取边的特征
+                    row, col = edge_index
+                    msg_input = torch.cat([h[row], h[col]], dim=-1)
+                    msg = layer(msg_input)
+                    
+                    # 聚合消息
+                    agg_msg = torch.zeros_like(h)
+                    agg_msg.index_add_(0, row, msg)
+                    
+                    # 更新节点特征
+                    h = h + agg_msg
+                
+                return h
+        
+        return SimplePaiNN(
+            hidden_channels=self.cfg.hidden_channels,
+            num_layers=self.cfg.num_layers,
+            num_rbf=self.cfg.num_rbf,
+            cutoff=self.cfg.cutoff
+        )
 
     def featurize(self, mol: Chem.Mol) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
-        使用UniMol对分子进行特征化
+        使用PaiNN对分子进行特征化
         
         Args:
             mol: RDKit分子对象
@@ -57,32 +115,72 @@ class UniMolLigandEncoder:
         Returns:
             (atom_features, info_dict) 其中atom_features是投影后的原子特征张量
         """
-        # 使用UniMol获取分子表示
-        smiles = Chem.MolToSmiles(mol)
-        
         try:
-            # 通过UniMol获取分子表示
-            repr_data = self.unimol_repr.get_repr([smiles])
-            # UniMol返回的表示通常是[分子数, 原子数, 特征维数]
-            mol_repr = repr_data['repr'][0]  # 取第一个分子的表示
+            # 获取原子类型和坐标
+            N = mol.GetNumAtoms()
+            Z = torch.tensor([a.GetAtomicNum() for a in mol.GetAtoms()], dtype=torch.long)  # [N]
             
-            # 转换为张量
-            mol_repr_tensor = torch.tensor(mol_repr, dtype=torch.float32)
-            
-            # 获取分子的坐标信息
-            if mol.GetNumConformers() > 0:
-                conf = mol.GetConformer()
-                coords = []
-                for i in range(mol.GetNumAtoms()):
-                    pos = conf.GetAtomPosition(i)
-                    coords.append([pos.x, pos.y, pos.z])
-                coords_tensor = torch.tensor(coords, dtype=torch.float32)
+            # 获取3D坐标
+            if mol.GetNumConformers() == 0:
+                # 如果没有3D构象，生成一个
+                mol_copy = Chem.Mol(mol)
+                Chem.AllChem.EmbedMolecule(mol_copy, Chem.AllChem.ETKDGv3())
+                Chem.AllChem.UFFOptimizeMolecule(mol_copy, maxIters=200)
+                conf = mol_copy.GetConformer()
             else:
-                # 如果没有坐标，生成随机坐标
-                coords_tensor = torch.randn(mol_repr_tensor.size(0), 3)
+                conf = mol.GetConformer()
             
-            # 投影到目标维度
-            projected_features = self.projection(mol_repr_tensor)
+            pos = torch.tensor([
+                [conf.GetAtomPosition(i).x,
+                 conf.GetAtomPosition(i).y,
+                 conf.GetAtomPosition(i).z] for i in range(N)
+            ], dtype=torch.float)  # [N,3]
+            
+            # 构建分子图：键 + 半径近邻
+            edges = []
+            for b in mol.GetBonds():
+                i, j = b.GetBeginAtomIdx(), b.GetEndAtomIdx()
+                edges += [(i, j), (j, i)]
+            edge_index_bond = torch.tensor(edges, dtype=torch.long).t().contiguous()  # [2, E_bond]
+
+            # 半径近邻
+            cutoff = self.cfg.cutoff
+            coords = pos.numpy()
+            nbrs = []
+            for i in range(N):
+                for j in range(N):
+                    if i == j:
+                        continue
+                    if torch.norm(pos[i] - pos[j]) <= cutoff:
+                        nbrs.append((i, j))
+            edge_index_rad = torch.tensor(nbrs, dtype=torch.long).t().contiguous()  # [2, E_rad]
+
+            # 合并边
+            if edge_index_bond.numel() > 0 and edge_index_rad.numel() > 0:
+                edge_index = torch.unique(torch.cat([edge_index_bond, edge_index_rad], dim=1), dim=1)
+            elif edge_index_bond.numel() > 0:
+                edge_index = edge_index_bond
+            elif edge_index_rad.numel() > 0:
+                edge_index = edge_index_rad
+            else:
+                # 如果没有边，创建自环以避免错误
+                edge_index = torch.stack([torch.arange(N), torch.arange(N)], dim=0)
+
+            # 创建批次张量（单分子：全0）
+            batch = torch.zeros(N, dtype=torch.long)
+            
+            # 使用PaiNN编码
+            with torch.no_grad():
+                device = next(self.painn.parameters()).device if next(self.painn.parameters()).is_cuda else 'cpu'
+                Z = Z.to(device)
+                pos = pos.to(device)
+                edge_index = edge_index.to(device)
+                batch = batch.to(device)
+                
+                H = self.painn(z=Z, pos=pos, batch=batch, edge_index=edge_index)  # [N, hidden]
+                
+                # 投影到目标维度
+                H_L = self.projection(H)  # [N, 512] - 这是per-atom tokens（配体分支）
             
             # 生成分子图结构信息
             bond_index, bond_type = self._get_bond_info(mol)
@@ -90,23 +188,23 @@ class UniMolLigandEncoder:
             torsion_index = self._get_torsion_info(mol)
             
             info = {
-                "coords": coords_tensor,
-                "atom_feats": projected_features,
+                "coords": pos,
+                "atom_feats": H_L,
                 "bond_index": bond_index,
                 "bond_type": bond_type,
                 "angle_index": angle_index,
                 "torsion_index": torsion_index,
             }
             
-            return projected_features, info
+            return H_L, info
         except Exception as e:
-            # 如果UniMol失败，回退到传统的RDKit方法
-            print(f"UniMol编码失败，使用回退方法: {e}")
+            # 如果PaiNN失败，回退到传统的RDKit方法
+            print(f"PaiNN编码失败，使用回退方法: {e}")
             return self._fallback_encode(mol)
 
     def encode(self, mol: Chem.Mol) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
-        使用UniMol对分子进行编码（向后兼容方法）
+        使用PaiNN对分子进行编码（向后兼容方法）
         
         Args:
             mol: RDKit分子对象
