@@ -7,15 +7,15 @@ dataset:
   linked_structures_dir: "${dataset.root}/linked_structures"
   system_id_column: "system_id"
   two_char_column: "entry_pdb_id"
-  holo_structure_column: "structure_path"
-  ligand_file_column: "ligand_path"
+  holo_structure_column: "structure_path"  # 在annotation table中可能不存在此列
+  ligand_file_column: "ligand_path"       # 在annotation table中可能不存在此列
   pocket_radius: 8.0
   max_residues: 192
   max_tokens: 256
   contact_cutoff: 6.0
   ligand_cache_format: "pt"
-  holo_pdb_selector: "*_holo.pdb"
-  ligand_file_selector: "*_ligand.sdf"
+  holo_pdb_selector: "*.pdb"  # 修改为更通用的匹配模式
+  ligand_file_selector: "*.sdf"  # 修改为更通用的匹配模式
   ligand_fallback_format: "pdb"  # 如果没有 SDF 则尝试 PDB
 
 encoders:
