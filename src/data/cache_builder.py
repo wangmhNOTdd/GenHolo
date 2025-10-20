@@ -199,15 +199,19 @@ class StageACacheBuilder:
             if isinstance(path_value, str) and path_value:
                 path = self.dataset_cfg.root / path_value
                 if path.exists():
+                    print(f"DEBUG: Found holo structure at direct path: {path}")
                     return path.read_text(encoding="utf-8")
         
         # 从系统ID中提取两位字符代码（例如 "101m__1__1.A__1.C_1.D" -> "10"）
         code = system_id[:2]
         zip_path = self.dataset_cfg.systems_dir / f"{code}.zip"
+        print(f"DEBUG: Trying holo structure from zip: {zip_path}")
         if zip_path.exists():
             data = self._extract_from_zip(zip_path, system_id, self.dataset_cfg.holo_selector)
+            print(f"DEBUG: Successfully extracted holo structure from zip for {system_id}")
             return data.decode("utf-8")
             
+        print(f"DEBUG: Failed to find holo structure for {system_id}")
         raise FileNotFoundError(f"未找到 {system_id} 的 holo 结构文件")
 
     def _load_ligand(self, system_id: str, record: pd.Series):
@@ -217,14 +221,18 @@ class StageACacheBuilder:
             if isinstance(rel, str) and rel:
                 path = self.dataset_cfg.root / rel
                 if path.exists():
+                    print(f"DEBUG: Found ligand at direct path: {path}")
                     return load_ligand_from_file(str(path))
         
         # 使用 entry_pdb_id 查找 CIF 文件
         pdb_id = record[self.dataset_cfg.two_char_column]
         cif_path = self.dataset_cfg.linked_struct_dir / f"{pdb_id}_A.cif"
+        print(f"DEBUG: Trying ligand CIF file: {cif_path}")
         if cif_path.exists():
+            print(f"DEBUG: Successfully found ligand CIF file for {system_id}")
             return load_ligand_from_file(str(cif_path))
             
+        print(f"DEBUG: Failed to find ligand for {system_id}")
         raise FileNotFoundError(f"未找到 {system_id} 的配体文件")
 
     def _extract_from_zip(
