@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 from zipfile import ZipFile
 
 import numpy as np
@@ -28,6 +28,8 @@ except ImportError as exc:  # pragma: no cover
 
 from ..features.ligand import LigandEncoderConfig, LigandFeatureBuilder, load_ligand_from_file
 from ..features.protein import ESMProteinEncoder, ProteinEncoderConfig
+from ..features.unimol_ligand import UniMolLigandEncoder, UniMolLigandEncoderConfig
+from ..features.esm3_protein import ESM3ProteinEncoder, ESM3ProteinEncoderConfig
 from .utils import load_split_ids
 
 
@@ -64,12 +66,22 @@ class StageACacheBuilder:
     def __init__(
         self,
         dataset_cfg: DatasetConfig,
-        protein_cfg: ProteinEncoderConfig,
-        ligand_cfg: LigandEncoderConfig,
+        protein_cfg: Union[ESM3ProteinEncoderConfig, ProteinEncoderConfig],
+        ligand_cfg: Union[UniMolLigandEncoderConfig, LigandEncoderConfig],
     ) -> None:
         self.dataset_cfg = dataset_cfg
-        self.protein_encoder = ESMProteinEncoder(protein_cfg)
-        self.ligand_builder = LigandFeatureBuilder(ligand_cfg)
+        # 根据配置类型创建相应的蛋白质编码器
+        if isinstance(protein_cfg, ESM3ProteinEncoderConfig):
+            self.protein_encoder = ESM3ProteinEncoder(protein_cfg)
+        else:
+            self.protein_encoder = ESMProteinEncoder(protein_cfg)
+            
+        # 根据配置类型创建相应的配体编码器
+        if isinstance(ligand_cfg, UniMolLigandEncoderConfig):
+            self.ligand_builder = UniMolLigandEncoder(ligand_cfg)
+        else:
+            self.ligand_builder = LigandFeatureBuilder(ligand_cfg)
+            
         self.parser = PDBParser(QUIET=True)
         self.annotation = pd.read_parquet(dataset_cfg.annotation_table)
         if dataset_cfg.system_id_column not in self.annotation.columns:

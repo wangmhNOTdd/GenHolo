@@ -20,21 +20,23 @@ dataset:
 
 encoders:
   protein:
-    type: "esm3"
-    model_name: "esm3_t30_150M_UR50D"  # 修改为实际使用的权重
+    type: "esm3"  # 使用ESM3模型
+    model_name: "esm3_sm_open_v1"  # ESM3模型名称
     chunk_size: 1024
     device: "cuda"
     fp16: true
     projection:
       type: "linear"
-      in_dim: 1024
-      out_dim: 512
+      in_dim: 1536  # ESM3输出维度
+      out_dim: 512  # 投影到512维
       checkpoint: null  # 可指定线性层权重文件
   ligand:
-    type: "rdkit_gnn"
-    feature_dim: 256
-    projection_dim: 512
-    force_rdkit_embed: true
+    type: "unimol"  # 使用UniMol
+    feature_dim: 512  # UniMol输出维度
+    projection_dim: 512  # 投影到512维
+    max_atoms: 256
+    use_gpu: true
+    remove_hs: true
 
 model:
   type: "latent_decoder"

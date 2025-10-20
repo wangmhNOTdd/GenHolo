@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Union
 
 try:
     import torch  # type: ignore
@@ -11,9 +11,15 @@ except ImportError as exc:  # pragma: no cover
 from ..data.cache_builder import DatasetConfig
 from ..features.ligand import LigandEncoderConfig
 from ..features.protein import ProteinEncoderConfig
+from ..features.unimol_ligand import UniMolLigandEncoderConfig
+from ..features.esm3_protein import ESM3ProteinEncoderConfig
 
 
-def build_stage_a_configs(cfg: dict) -> Tuple[DatasetConfig, ProteinEncoderConfig, LigandEncoderConfig]:
+def build_stage_a_configs(cfg: dict) -> Tuple[
+    DatasetConfig,
+    Union[ESM3ProteinEncoderConfig, ProteinEncoderConfig],
+    Union[UniMolLigandEncoderConfig, LigandEncoderConfig]
+]:
     dataset_cfg = DatasetConfig(
         root=Path(cfg["dataset"]["root"]),
         systems_dir=Path(cfg["dataset"]["systems_dir"]),
@@ -34,19 +40,44 @@ def build_stage_a_configs(cfg: dict) -> Tuple[DatasetConfig, ProteinEncoderConfi
         ligand_fallback=cfg["dataset"].get("ligand_fallback_format", "pdb"),
     )
 
-    protein_cfg = ProteinEncoderConfig(
-        model_name=cfg["encoders"]["protein"]["model_name"],
-        device=cfg["encoders"]["protein"].get("device", "cuda" if torch.cuda.is_available() else "cpu"),
-        fp16=cfg["encoders"]["protein"].get("fp16", False),
-        chunk_size=cfg["encoders"]["protein"].get("chunk_size", 1024),
-        proj_in=cfg["encoders"]["protein"]["projection"]["in_dim"],
-        proj_out=cfg["encoders"]["protein"]["projection"]["out_dim"],
-        proj_checkpoint=cfg["encoders"]["protein"]["projection"].get("checkpoint"),
-    )
+    # 根据配置选择蛋白质编码器类型
+    protein_type = cfg["encoders"]["protein"].get("type", "esm")
+    if protein_type == "esm3":
+        protein_cfg = ESM3ProteinEncoderConfig(
+            model_name=cfg["encoders"]["protein"]["model_name"],
+            device=cfg["encoders"]["protein"].get("device", "cuda" if torch.cuda.is_available() else "cpu"),
+            fp16=cfg["encoders"]["protein"].get("fp16", False),
+            chunk_size=cfg["encoders"]["protein"].get("chunk_size", 1024),
+            proj_in=cfg["encoders"]["protein"]["projection"]["in_dim"],
+            proj_out=cfg["encoders"]["protein"]["projection"]["out_dim"],
+            proj_checkpoint=cfg["encoders"]["protein"]["projection"].get("checkpoint"),
+        )
+    else:
+        # 传统ESM编码器
+        protein_cfg = ProteinEncoderConfig(
+            model_name=cfg["encoders"]["protein"]["model_name"],
+            device=cfg["encoders"]["protein"].get("device", "cuda" if torch.cuda.is_available() else "cpu"),
+            fp16=cfg["encoders"]["protein"].get("fp16", False),
+            chunk_size=cfg["encoders"]["protein"].get("chunk_size", 1024),
+            proj_in=cfg["encoders"]["protein"]["projection"]["in_dim"],
+            proj_out=cfg["encoders"]["protein"]["projection"]["out_dim"],
+            proj_checkpoint=cfg["encoders"]["protein"]["projection"].get("checkpoint"),
+        )
 
-    ligand_cfg = LigandEncoderConfig(
-        projection_dim=cfg["encoders"]["ligand"].get("projection_dim", 512),
-        force_embed=cfg["encoders"]["ligand"].get("force_rdkit_embed", True),
-    )
+    # 根据配置选择配体编码器类型
+    ligand_type = cfg["encoders"]["ligand"].get("type", "rdkit_gnn")
+    if ligand_type == "unimol":
+        ligand_cfg = UniMolLigandEncoderConfig(
+            projection_dim=cfg["encoders"]["ligand"].get("projection_dim", 512),
+            max_atoms=cfg["encoders"]["ligand"].get("max_atoms", 256),
+            use_gpu=cfg["encoders"]["ligand"].get("use_gpu", True),
+            remove_hs=cfg["encoders"]["ligand"].get("remove_hs", True),
+        )
+    else:
+        # 传统RDKit编码器
+        ligand_cfg = LigandEncoderConfig(
+            projection_dim=cfg["encoders"]["ligand"].get("projection_dim", 512),
+            force_embed=cfg["encoders"]["ligand"].get("force_rdkit_embed", True),
+        )
 
     return dataset_cfg, protein_cfg, ligand_cfg

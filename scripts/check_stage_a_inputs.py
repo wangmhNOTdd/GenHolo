@@ -20,6 +20,18 @@ from src.data.utils import load_split_ids
 from src.utils.config import load_config
 from src.utils.stage_a_setup import build_stage_a_configs
 
+try:
+    import torch  # type: ignore
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
+try:
+    from rdkit import Chem  # type: ignore
+    RDKit_AVAILABLE = True
+except ImportError:
+    RDKit_AVAILABLE = False
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="检查 Stage A 所需数据文件是否齐全")
@@ -88,10 +100,17 @@ def check_ligand(dataset_cfg, record) -> Tuple[bool, str]:
             return False, detail
     code = record.get(dataset_cfg.two_char_column)
     if isinstance(code, str) and code:
-        zip_path = dataset_cfg.linked_struct_dir / f"{code}.zip"
+        # 尝试在linked_structures目录下查找配体文件
+        zip_path = dataset_cfg.linked_struct_dir / f"{code[:2]}.zip"  # 使用前两位字符
         ok, detail = _check_zip(zip_path, record[dataset_cfg.system_id_column], dataset_cfg.ligand_selector)
         if ok:
             return True, f"zip:{detail}"
+        else:
+            # 如果在linked_structures中找不到，尝试在systems目录中查找
+            system_zip_path = dataset_cfg.systems_dir / f"{code[:2]}.zip"
+            ok, detail = _check_zip(system_zip_path, record[dataset_cfg.system_id_column], dataset_cfg.ligand_selector)
+            if ok:
+                return True, f"zip:{detail}"
         return False, detail
     return False, "未提供配体文件路径或匹配失败"
 
@@ -99,7 +118,13 @@ def check_ligand(dataset_cfg, record) -> Tuple[bool, str]:
 def main() -> None:
     args = parse_args()
     cfg = load_config(args.config)
-    dataset_cfg, _, _ = build_stage_a_configs(cfg)
+    dataset_cfg, protein_cfg, ligand_cfg = build_stage_a_configs(cfg)
+
+    print(f"使用蛋白质编码器类型: {type(protein_cfg).__name__}")
+    print(f"使用配体编码器类型: {type(ligand_cfg).__name__}")
+    print(f"蛋白质编码器输出维度: {protein_cfg.proj_out}")
+    print(f"配体编码器输出维度: {ligand_cfg.projection_dim}")
+    print()
 
     annotation = load_annotation(dataset_cfg.annotation_table, dataset_cfg.system_id_column)
     if dataset_cfg.two_char_column not in annotation.columns:
@@ -136,6 +161,13 @@ def main() -> None:
             for item in result["ok"]:
                 print(f"  [OK] {item}")
         print()
+    
+    # 额外的依赖检查
+    print("=== 依赖检查 ===")
+    print(f"PyTorch 可用: {TORCH_AVAILABLE}")
+    print(f"RDKit 可用: {RDKit_AVAILABLE}")
+    print(f"蛋白质编码器类型: {type(protein_cfg).__name__}")
+    print(f"配体编码器类型: {type(ligand_cfg).__name__}")
 
 
 if __name__ == "__main__":
