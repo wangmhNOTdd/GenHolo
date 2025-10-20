@@ -76,15 +76,6 @@ class StageACacheBuilder:
             raise KeyError(f"annotation 表缺少列 {dataset_cfg.system_id_column}")
         self.annotation.set_index(dataset_cfg.system_id_column, inplace=True)
         os.makedirs(dataset_cfg.cache_root, exist_ok=True)
-        
-        # 确保 two_char_column 的值是两位字符
-        self.two_char_length = 2
-    
-    def _get_two_char_code(self, record: pd.Series) -> str:
-        """从记录中获取两位字符代码"""
-        code = str(record[self.dataset_cfg.two_char_column])
-        # 确保返回两位字符
-        return code[:self.two_char_length]
     
     def build_split(self, split: str, limit: Optional[int] = None) -> None:
         ids = load_split_ids(self.dataset_cfg.split_yaml, split)
@@ -210,18 +201,12 @@ class StageACacheBuilder:
                 if path.exists():
                     return path.read_text(encoding="utf-8")
         
-        # 尝试使用 two_char_code 查找
-        code = self._get_two_char_code(record)
+        # 从系统ID中提取两位字符代码（例如 "101m__1__1.A__1.C_1.D" -> "10"）
+        code = system_id[:2]
         zip_path = self.dataset_cfg.systems_dir / f"{code}.zip"
         if zip_path.exists():
             data = self._extract_from_zip(zip_path, system_id, self.dataset_cfg.holo_selector)
             return data.decode("utf-8")
-        
-        # 尝试直接在 systems 目录中查找 CIF 文件
-        pdb_id = record[self.dataset_cfg.two_char_column]
-        cif_path = self.dataset_cfg.systems_dir / f"{pdb_id}_A.cif"
-        if cif_path.exists():
-            return cif_path.read_text(encoding="utf-8")
             
         raise FileNotFoundError(f"未找到 {system_id} 的 holo 结构文件")
 
@@ -234,14 +219,7 @@ class StageACacheBuilder:
                 if path.exists():
                     return load_ligand_from_file(str(path))
         
-        # 尝试使用 two_char_code 查找
-        code = self._get_two_char_code(record)
-        zip_path = self.dataset_cfg.linked_struct_dir / f"{code}.zip"
-        if zip_path.exists():
-            data = self._extract_from_zip(zip_path, system_id, self.dataset_cfg.ligand_selector)
-            return load_ligand_from_file(self._write_temp_file(system_id, data))
-        
-        # 尝试直接在 linked_structures 目录中查找 CIF 文件
+        # 使用 entry_pdb_id 查找 CIF 文件
         pdb_id = record[self.dataset_cfg.two_char_column]
         cif_path = self.dataset_cfg.linked_struct_dir / f"{pdb_id}_A.cif"
         if cif_path.exists():
